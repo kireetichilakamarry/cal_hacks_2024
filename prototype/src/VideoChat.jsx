@@ -19,6 +19,8 @@ const VideoChat = () => {
   const [pc, setPc] = useState(null);
   const [callId, setCallId] = useState('');
 
+  const [isWebcamOn, setIsWebcamOn] = useState(false);
+
   const webcamVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const callInputRef = useRef(null);
@@ -37,26 +39,82 @@ const VideoChat = () => {
       iceCandidatePoolSize: 10,
     };
 
-    setPc(new RTCPeerConnection(servers));
-  }, []);
+    const pcInstance = new RTCPeerConnection(servers);
+    setPc(pcInstance);
 
-  const setupMediaSources = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    setLocalStream(stream);
-    setRemoteStream(new MediaStream());
+    const newRemoteStream = new MediaStream();
+    setRemoteStream(newRemoteStream);
 
-    stream.getTracks().forEach((track) => {
-      pc.addTrack(track, stream);
-    });
-
-    pc.ontrack = (event) => {
+    pcInstance.ontrack = (event) => {
       event.streams[0].getTracks().forEach((track) => {
-        remoteStream.addTrack(track);
+        newRemoteStream.addTrack(track);
       });
     };
 
-    webcamVideoRef.current.srcObject = stream;
-    remoteVideoRef.current.srcObject = remoteStream;
+    return () => {
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+      if (pcInstance) {
+        pcInstance.close();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let intervalId;
+
+    const continuouslyAddTracks = async () => {
+      if (isWebcamOn && localStream && pc) {
+        await addTracksAsync(localStream, pc);
+      }
+    };
+
+    if (isWebcamOn) {
+      intervalId = setInterval(continuouslyAddTracks, 50); // Run every second
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isWebcamOn, localStream, pc]);
+
+  const addTracksAsync = async (stream, pc) => {
+    const tracks = stream.getTracks();
+    for (const track of tracks) {
+      await new Promise((resolve) => {
+        const senders = pc.getSenders();
+        const hasSender = senders.some(sender => sender.track && sender.track.id === track.id);
+        if (!hasSender) {
+          pc.addTrack(track, stream);
+          console.log('New track added:', track.kind);
+        }
+        resolve();
+      });
+    }
+  };
+
+  const setupMediaSources = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      setLocalStream(stream);
+      setIsWebcamOn(true);
+
+      webcamVideoRef.current.srcObject = stream;
+      remoteVideoRef.current.srcObject = remoteStream;
+    } catch (error) {
+      console.error('Error accessing media devices:', error);
+    }
+  };
+
+  const stopWebcam = () => {
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      setLocalStream(null);
+    }
+    setIsWebcamOn(false);
   };
 
   const createOffer = async () => {
@@ -162,6 +220,9 @@ const VideoChat = () => {
 
       <h2>4. Hangup</h2>
       <button disabled={!localStream}>Hangup</button>
+
+      <button onClick={setupMediaSources} disabled={isWebcamOn}>Start webcam</button>
+<button onClick={stopWebcam} disabled={!isWebcamOn}>Stop webcam</button>
     </div>
   );
 };
