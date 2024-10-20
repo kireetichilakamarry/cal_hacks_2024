@@ -1,11 +1,17 @@
-//import React from 'react';
-import VideoChat from './videochat.jsx';
+import VideoChat from './videochat';
 
 function App() {
   return (
     <div className="App">
-      <h1>Omegle-like Video Chat</h1>
-      <VideoChat />
+      <header className="App-header">
+        <h1>WebRTC Demo</h1>
+      </header>
+      <main>
+        <VideoChat />
+      </main>
+      <footer>
+        <p>© 2024 WebRTC Demo</p>
+      </footer>
     </div>
   );
 }
